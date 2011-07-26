@@ -10,17 +10,17 @@ import shutil
 
 class Povray():
 
+    process      = None
+    args         = []
+    return_value = None
+    completed    = False
+
     def __init__(self, config_json, node_number):
 
         config_info = json.loads(config_json)
 
         self.node_number = node_number
         self.workingdir  = "/var/PovNode/node" + str(self.node_number)
-
-        self.returnvalue = None
-
-        self.process     = ""
-        self.args        = []
 
         self.command     = "povray"
 
@@ -59,12 +59,13 @@ class Povray():
     def run(self):
         self.process = Popen(self.args, stdin=None, stdout=PIPE, stderr=PIPE)
 
-    def finished(self):
+    def poll(self):
         value =  self.process.poll()
         if value == None:
             return False
         else:
             self.return_value = value
+            self.completed = True
             return True
 
     def communicate(self):
@@ -76,51 +77,65 @@ class Povray():
     def __del__(self):
         self.cleanup()
 
+class ProcessManager():
+
+    process_list = []
+    process_num  = 1
+    debug        = False
+    running      = 0
+
+    def __init__(self, debug):
+        self.debug = debug
+
+    def new_process(self, config_json):
+        new_process = Povray(config_json, self.process_num)
+        new_process.setup()
+        new_process.create_args()
+        new_process.run()
+        self.process_list.append(new_process)
+        if self.debug:
+            print "Process %i added" % self.process_num
+        self.process_num += 1
+        self.running += 1
+
+    def check_processes(self):
+        for process in self.process_list:
+            poll_value = process.poll()
+            if self.debug:
+                print "Process %i poll is %s" % (process.node_number, poll_value)
+
+    def clear_processes(self):
+        finished = [process for process in self.process_list if process.completed]
+        self.process_list = [process for process in self.process_list if not process.completed]
+        self.running -= len(finished)
+        if self.debug:
+            print "%i processes finished" % len(finished)
+        for process in finished:
+            print "%i  %s" % (process.node_number, process.get_image())
+        if self.debug:
+            print "%i processes still running" % len(self.process_list)
 
 def main():
-    data1 = {}
-    data1['inputfile']  = 'fractal2.pov'
-    data1['outputfile'] = 'output.png'
-    data1['width']      = '1920'
-    data1['height']     = '1920'
-    data1['start']      = '1'
-    data1['end']        = '960'
-    data1['extras']     = ["+FN", "-GA", "-D", "-V"]
+    data = {}
+    data['inputfile']  = 'fractal2.pov'
+    data['outputfile'] = 'output.png'
+    data['width']      = '1920'
+    data['height']     = '1920'
+    data['start']      = '1'
+    data['end']        = '1920'
+    data['extras']     = ["+FN", "-GA", "-D", "-V"]
 
-    data2 = {}
-    data2['inputfile']  = 'fractal2.pov'
-    data2['outputfile'] = 'output.png'
-    data2['width']      = '1920'
-    data2['height']     = '1920'
-    data2['start']      = '961'
-    data2['end']        = '1920'
-    data2['extras']     = ["+FN", "-GA", "-D", "-V"]
+    config_json = json.dumps(data)
 
-    config_json1 = json.dumps(data1)
-    config_json2 = json.dumps(data2)
-
-    print "create povray process object"
-    pov_processes = {}
-    pov_processes[1] = Povray(config_json1, 1)
-    pov_processes[2] = Povray(config_json2, 2)
-    pov_processes[1].create_args()
-    pov_processes[2].create_args()
-    print pov_processes[1].args
-    print pov_processes[2].args
-    pov_processes[1].setup()
-    pov_processes[2].setup()
-    pov_processes[1].run()
-    pov_processes[2].run()
+    print "create process manager object"
+    manager = ProcessManager(True)
+    manager.new_process(config_json)
+    #manager.new_process(config_json)
+    #manager.new_process(config_json)
+    #manager.new_process(config_json)
     while 1:
-        if len(pov_processes) == 0:
-            sys.exit()
-        process_list = pov_processes.copy()
-        for number, process in process_list.iteritems():
-            pollval = process.finished()
-            print "%i  %s" % (number, pollval)
-            if pollval == True:
-                print process.communicate()
-                del(pov_processes[number])
+        manager.check_processes()
+        manager.clear_processes()
         sleep(1)
 
 
