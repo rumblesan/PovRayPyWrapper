@@ -17,6 +17,8 @@ class Povray():
         self.node_number = node_number
         self.workingdir  = "/var/PovNode/node" + str(self.node_number)
 
+        self.returnvalue = None
+
         self.process     = ""
         self.args        = []
 
@@ -57,39 +59,73 @@ class Povray():
     def run(self):
         self.process = Popen(self.args, stdin=None, stdout=PIPE, stderr=PIPE)
 
-    def poll(self):
-        return self.process.poll()
+    def finished(self):
+        value =  self.process.poll()
+        if value == None:
+            return False
+        else:
+            self.return_value = value
+            return True
 
     def communicate(self):
-        return self.communicate.poll()
+        return self.process.communicate()
+
+    def get_image(self):
+        return os.path.join(self.workingdir, self.outputfile)
+
+    def __del__(self):
+        self.cleanup()
 
 
-data = {}
-data['inputfile']  = 'fractal2.pov'
-data['outputfile'] = 'output.png'
-data['height']     = '768'
-data['width']      = '1024'
-data['start']      = '1'
-data['end']        = '1024'
-data['extras']     = ["+FN", "-GA", "-D", "-V"]
+def main():
+    data1 = {}
+    data1['inputfile']  = 'fractal2.pov'
+    data1['outputfile'] = 'output.png'
+    data1['width']      = '1920'
+    data1['height']     = '1920'
+    data1['start']      = '1'
+    data1['end']        = '960'
+    data1['extras']     = ["+FN", "-GA", "-D", "-V"]
 
-config_json = json.dumps(data)
+    data2 = {}
+    data2['inputfile']  = 'fractal2.pov'
+    data2['outputfile'] = 'output.png'
+    data2['width']      = '1920'
+    data2['height']     = '1920'
+    data2['start']      = '961'
+    data2['end']        = '1920'
+    data2['extras']     = ["+FN", "-GA", "-D", "-V"]
 
-print "create povray process object"
-povproc = Povray(config_json, 1)
-povproc.create_args()
-print povproc.args
-povproc.setup()
-povproc.run()
-while 1:
-    pollval = povproc.poll()
-    print pollval
-    if pollval == 0:
-        sys.exit()
-        print povproc.communicate()
-    sleep(1)
+    config_json1 = json.dumps(data1)
+    config_json2 = json.dumps(data2)
+
+    print "create povray process object"
+    pov_processes = {}
+    pov_processes[1] = Povray(config_json1, 1)
+    pov_processes[2] = Povray(config_json2, 2)
+    pov_processes[1].create_args()
+    pov_processes[2].create_args()
+    print pov_processes[1].args
+    print pov_processes[2].args
+    pov_processes[1].setup()
+    pov_processes[2].setup()
+    pov_processes[1].run()
+    pov_processes[2].run()
+    while 1:
+        if len(pov_processes) == 0:
+            sys.exit()
+        process_list = pov_processes.copy()
+        for number, process in process_list.iteritems():
+            pollval = process.finished()
+            print "%i  %s" % (number, pollval)
+            if pollval == True:
+                print process.communicate()
+                del(pov_processes[number])
+        sleep(1)
 
 
 
+if __name__ == '__main__':
+    main()
 
 
